@@ -1,0 +1,655 @@
+---
+title: "Survival Model Selection and Validation for HEOR in R"
+subtitle: "An HTA-aligned workflow for fitting, diagnosing, comparing, and justifying parameteric survival models"
+author: "Xin (David) Zhao"
+date: "2026-08-17"
+output: 
+    html_document:
+        toc: TRUE
+        code_folding: "show"
+        code_download: TRUE
+        theme:
+            bg: "#FFFFFF"
+            fg: "#24292F"
+            base_font:
+                google: "Inter"
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align='center')
+
+```
+
+
+## Introduction
+
+In health economic evaluations such as cost-effectiveness analyses, estimating the long-term health benefits of innovative treatments over a lifetime horizon is essential. However, randomized controlled trials (RCTs) typically have short follow-up periods. Therefore, following health technology assessment (HTA) guidelines, it is important to extrapolate survival data in a statistically robust and clinically justified manner to predict life expectancy for both new treatments and standard care.
+
+This R notebook provides a reusable, HTA-oriented framework showing analysts not only how to fit survival models in R, but how to evaluate, compare, interpret, and defend the model selected for economic evaluation.
+
+## Defensible workflow and R tools
+
+### NICE-recommended survival extrapolation workflow
+
+NICE TSD14 recommends a structured four-step procedure to ensure that survival extrapolations are both statistically sound and clinically credible.
+
+Each step builds on the last, guiding the analyst from exploratory data inspection through to a fully justified model selection that can withstand scrutiny in a health technology appraisal.
+
+**Step 1 — Assess model assumptions & hazard structure**
+
+Examine the observed data with graphical and statistical tools to understand which survival and hazard shapes are plausible before selecting a model.
+
+**Step 2 — Fit candidate models**
+
+Fit the full standard parametric family (Exponential, Weibull, Gompertz, Log-normal, Log-logistic, Generalized Gamma) and flexible alternatives where justified.
+
+**Step 3 — Evaluate statistical fit & graphical diagnostics**
+
+Compare fitted curves against the Kaplan-Meier estimate using AIC/BIC and residual diagnostics. Visually inspect hazard plots, probability plots, and residual plots to detect systematic departures.
+
+**Step 4 — Evaluate external validity & decision uncertainty**
+
+Assess whether the extrapolated curves are clinically plausible, consistent with external evidence, and robust to alternative model choices.
+
+### R packages
+
+Three credible specialized R packages were used to implement the workflow,
+
+* `survival`: Fit Kaplan-Meier curves and visualizations (eg., cumulative hazard plot)
+* `flexsurv`: Fit parametric and flexible survival models, residual diagnosis, and visualizations
+* `GofCens`: Assess goodness-of-fit and visualizations
+
+
+```{r packages}
+
+# Install required packages
+required_pkgs <- c("survival", "flexsurv", "GofCens")
+
+for (pkg in required_pkgs) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        install.packages(pkg)
+}
+}
+
+```
+
+
+```{r}
+
+# Load required packages
+
+invisible(lapply(required_pkgs, library, character.only = TRUE))
+
+```
+
+
+```{r}
+
+# Todo @Aug 24
+# 1. Add a model selection and validation summary that brings all evidence together
+# 2. Correct statistical interpretation and align with TSD14
+# 3. Update distribution names in list or vector objects (e.g., generalized gamma instead of gamma)
+# 4. For better readability, add callout boxes where applicable
+# 5. Add a clear user settings section near the beginning
+# 6. Package repeated operations into helper functions
+# 7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
+
+
+```
+
+
+# User setting
+
+```{r}
+
+# Input files
+control_file <- "IPD_ctrl_gp.csv"
+treatment_file <- "IPD_treat_gp.csv"
+
+
+# Variables definition
+time_var <- "time"
+status_var <- "status"
+treat_var <- "treat"
+
+
+# Model candidate definition
+candidate_model <- c(
+  "exponential",
+  "weibull",
+  "gompertz",
+  "lnorm",
+  "llogis",
+  "gengamma"
+)
+
+
+# Horizon time definition (months)
+time_horizon <- 120
+
+
+```
+
+
+## Input data
+
+The input data, censored time-to-event data (locoregional control), were digitized from an RCT study by 
+[Bonner et al, 2006](https://www.nejm.org/doi/full/10.1056/NEJMoa053422), which investigated the effect of cetuximab treatment on patients with head and neck cancer.
+
+The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data for the control (n=213) and treatment (n=211) arms, with follow-up duration of 50 months.
+
+```{r input}
+
+# Control arm
+ipd_ctrl <- read.csv("IPD_ctrl_gp.csv")
+
+# Treatment arm
+ipd_trt <- read.csv("IPD_treat_gp.csv")
+
+# Merge data sets of two arms
+ipd_merged <- rbind(ipd_ctrl, ipd_trt)
+
+
+```
+
+
+Inspect the first rows of the combined dataset. The column
+
+- `time` represents follow-up time in months
+- `status`: 1 and 0 represent event and censored, respectively
+- `treat`: 1 and 0 represent treatment and control, respectively.
+
+
+```{r inpur inspect}
+
+# Inspect first rows of the merged data set
+head(ipd_merged, 15)
+
+```
+
+
+## Step 1 - Assess model assumptions & hazard structure
+
+Use graphical and statistical tools to determine which survival and hazard shapes are plausible before selecting a model.
+
+### Step 1.1 Log cumulative hazard plot 
+
+A (log) cumulative hazard plot is recommended to answer key questions:
+
+- Are proportional hazards reasonable?
+- What hazard shape is supported?
+
+
+```{r log-cum-hazard km}
+
+# Fit Kaplan-Meier curves, stratified by treatment groups
+surv_km <- survival::survfit(Surv(time, status) ~ treat,
+  data = ipd_merged,
+  type = "kaplan-meier"
+)
+
+```
+
+To assess whether hazards are constant over time (e.g., exponential distribution), plot cumulative hazard versus time. To evaluate monotonic changes in hazard (e.g., Weibull and Gompertz distributions), plot the logarithm of cumulative hazard against the logarithm of time.
+
+
+```{r log-cum-hazard plots, fig.cap="Figure 1. Log cumulative hazard plots for the control and treatment arms."}
+
+# Plot cumulative hazard
+old_par <- par(no.readonly = TRUE)
+
+par(mfrow = c(1, 2)) # Set up a 1x2 plotting area
+
+plot(surv_km,
+  fun = "cumhaz",
+  xlab = "Time (months)",
+  ylab = "Cumulative hazard",
+  col = c("black", "green"),
+  main = "Cumulative hazard plot"
+)
+
+legend("topleft",
+  legend = c("Control", "Treatment"),
+  col = c("black", "green"),
+  lty = 1,
+  lwd = 1,
+  bty = "n"
+)
+
+# Log both axis
+plot(surv_km,
+  fun = "cumhaz", 
+  log = "xy",
+  xlab = "Log, Time (months)",
+  ylab = "Log, Cumulative hazard",
+  col = c("black", "green"),
+  main = "Log cumulative hazard plot"
+)
+
+legend("topleft",
+  legend = c("Control", "Treatment"),
+  col = c("black", "green"),
+  lty = 1,
+  lwd = 1,
+  bty = "n"
+)
+
+
+```
+The left plot showed that cumulative hazards appeared to transition around 10-20 months, indicating the hazard is constant over the follow-up duration.
+
+The right plot showed that cumulative hazards increased over time, suggesting the Weibull and Gompertz distribution assumptions may be reasonable.
+
+In addition, proportional hazards are valid across the two arms in the right plot.
+
+
+
+### Step 1.2 Overlap KM vs parametric models 
+
+The purpose of overlapping KM curves with the chosen parametric model curves is to evaluate goodness-of-fit for various parametric survival model candidates visually.
+
+
+```{r}
+
+# Define a vector of data sets of two arms for loop iterations
+data_list  <- list(
+  ipd_ctrl = ipd_ctrl,
+  ipd_trt = ipd_trt
+)
+
+
+# Define a vector of recommended parametric models for loop iterations
+distr_list <- c(
+  "exponential",
+  "weibull",
+  "gompertz",
+  "lognormal",
+  'loglogistic',
+  "llogis"
+)
+
+```
+
+The package `flexsurv` can fit a variety of parametric survival models effectively. The plot shows fitted and observed data for the control and treatment arms separately.
+
+```{r}
+
+# Create space for global axis labels
+par(
+  mfrow = c(2, 5),
+  oma = c(4, 4, 1, 1),   # outer margins
+  mar = c(3, 2, 4, 2)    # smaller margins for individual plots
+)
+
+for (data_name in names(data_list)) {
+
+  data <- data_list[[data_name]]
+
+  for (distr in distr_list) {
+
+    tryCatch(
+      {
+        fit <- flexsurv::flexsurvreg(
+          survival::Surv(time, status) ~ 1,
+          data = data,
+          dist = distr
+        )
+
+        plot(
+          fit,
+          type = "survival",
+          ci = TRUE,
+          main = paste(distr, "vs KM"),
+          xlab = "",
+          ylab = ""
+        )
+        
+        if (distr == distr_list[1]) {
+
+          panel_label <- if (data_name == names(data_list)[1]) {
+            "(a) Control"
+          } else {
+            "(b) Treatment"
+          }
+        
+          mtext(
+            panel_label,
+            side = 3,
+            line = 3,
+            adj = 0,
+            font = 2,
+            cex = 1
+          )}
+      },
+      error = function(error_message) {
+        warning(
+          "Model failed for dataset '", data_name,
+          "' with distribution '", distr, "': ",
+          conditionMessage(error_message)
+        )
+      }
+    )
+  }
+}
+
+# Global axis labels
+mtext(
+  "Time (months)",
+  side = 1,
+  outer = TRUE,
+  line = 2
+)
+
+mtext(
+  "Survival probability",
+  side = 2,
+  outer = TRUE,
+  line = 2
+)
+
+```
+
+The upper and lower panels represent control and treatment arms, respectively. From visual inspection, the Gompertz, log-normal, and log-logistic models/curves appear to fit the observed trial data better than the exponential and Weibull models.
+
+### Step 1.3 Q-Q plot for right censored data
+
+The purpose of using Q-Q plot is to determine any specific distribution families are compatible with the observed data.
+
+
+```{r, fig.show = "hold", out.width='30%', fig.width=4, fig.height=4, fig.align='center'}
+
+for (distr in distr_list) {
+  
+  tryCatch(
+    {
+      
+    GofCens::probPlot(
+        ipd_ctrl$time,
+        ipd_ctrl$status,
+        distr = distr,
+        plots = "QQ",
+        mtitle = FALSE,
+        ggplo = FALSE,
+        prnt = FALSE
+      )
+      
+    usr <- par("usr")
+    
+    text(x = usr[1] + 0.10 * (usr[2] - usr[1]),
+         y = usr[4] - 0.12 * (usr[4] - usr[3]),
+         labels = distr,
+         adj = c(0, 1),
+         font = 2,
+         cex = 1)
+    
+    },
+    error = function(error_message) {
+      warning(
+        "Distribution '", distr,
+        "' is not available for GofCens::probPlot(): ",
+        conditionMessage(error_message)
+      )
+    }
+  )
+}
+
+
+
+```
+
+However, `GofCens` cannot support the Gompertz distribution. Moderate deviations appeared for the exponential, Weibull, log-normal, and log-logistic distributions, especially in mid-to-late follow-up. 
+
+### Step 1.4 Residual plot (Cox-snell)
+
+The residual graphics can detect any systematic lack of fit in any candidate.
+
+
+```{r}
+
+par(
+  mfrow = c(2, 5),
+  oma = c(4, 4, 2, 1),   # outer margins
+  mar = c(3, 2, 4.5, 1)    # individual plot margins
+)
+
+for (data_name in names(data_list)) {
+
+  data <- data_list[[data_name]]
+
+  for (distr in distr_list) {
+
+    tryCatch(
+      {
+        # Fit parametric survival model
+        fit <- flexsurv::flexsurvreg(
+          survival::Surv(time, status) ~ 1,
+          data = data,
+          dist = distr
+        )
+
+        # Cox-Snell residuals
+        cs <- flexsurv::coxsnell_flexsurvreg(fit)
+
+        # Estimate cumulative hazard of residuals
+        surv <- survival::survfit(
+          survival::Surv(cs$est, data$status) ~ 1
+        )
+
+        # Plot
+        plot(
+          surv,
+          fun = "cumhaz",
+          main = distr,
+          xlab = "",
+          ylab = ""
+        )
+
+        # Ideal Cox-Snell reference line
+        abline(0, 1, col = "red")
+        
+        if (distr == distr_list[1]) {
+
+          panel_label <- if (data_name == names(data_list)[1]) {
+            "(a) Control"
+          } else {
+            "(b) Treatment"
+          }
+        
+          mtext(
+            panel_label,
+            side = 3,
+            line = 3,
+            adj = 0,
+            font = 2,
+            cex = 1
+          )
+}
+      },
+      error = function(error_message) {
+        warning(
+          "Model failed for dataset '", data_name,
+          "' with distribution '", distr, "': ",
+          conditionMessage(error_message)
+        )
+      }
+    )
+  }
+}
+
+
+# Global axis labels
+mtext(
+  "Cox-Snell residual",
+  side = 1,
+  outer = TRUE,
+  line = 2
+)
+
+mtext(
+  "Cumulative hazard",
+  side = 2,
+  outer = TRUE,
+  line = 2
+)
+
+
+
+
+
+```
+
+The red straight line represents a perfect goodness-of-fit between the model and the observed data. By comparing the black lines of individual models with specific distributional assumptions, we can see that Gompertz, log-normal, and log-logistic performed better for the Control arm, while Gompertz alone may have best fit the observed survival data in the Treatment arm among all model candidates. 
+
+In addition, the Cox-Snell residual is a scientifically proven measure suitable for censored survival data. 
+
+
+## Step 2. Fit a common parametric survival models with two arms
+
+Fit the full standard parametric family (Exponential, Weibull, Gompertz, Log-normal, Log-logistic, Generalized Gamma) and flexible alternatives where justified.
+
+```{r}
+
+
+model_distr_list <- c(
+  "exponential",
+  "weibull",
+  "gompertz",
+  "lognormal",
+  "llogis",
+  "gamma"
+)
+
+fitted_models <- lapply(model_distr_list, function(distr) {
+  flexsurv::flexsurvreg(
+    Surv(time, status) ~ treat,
+    data = ipd_merged,
+    dist = distr
+  )
+})
+
+names(fitted_models) <- model_distr_list
+
+```
+
+### Step 3.1 Evaluate AIC of fitted models 
+
+Evaluate robustness of the fitted model using the information criteria, AIC. The smaller the AIC scores, the more robut a model fit to the observed data. 
+
+```{r}
+
+aic_values <- sapply(fitted_models, function(model) {
+  model$AIC
+})
+
+# Create a data frame to display AIC values for each distribution
+aic_df <- data.frame(
+  Distribution = names(aic_values),
+  AIC = aic_values
+)
+
+# Drop row name
+rownames(aic_df) <- NULL
+
+# Sort the data frame by AIC values in ascending order
+aic_df <- aic_df[order(aic_df$AIC), ]
+
+aic_df # gompertz has the lowest AIC value
+
+
+```
+
+In line with the above graphics diagnostics, Gompertz model perform the best in fitting the observed trial data, among all the six model candidates.  
+
+
+### Step 3.2 Overall KM vs best fitted model 
+
+As a complemment evaluation, we visually inspect the fitted model curves, by comparing with non-parametric Kaplan-Meier curves for Control and Treatment arms, separately. 
+
+
+```{r, fig.width=14, fig.height=7, out.width='65%'}
+
+par(mfrow = c(6, 2),
+    cex.main = 2,
+    cex.axis = 1.5,
+    cex.lab = 1.5)
+
+
+for (mod in names(fitted_models)) {
+
+  par(mfrow = c(1, 2))
+
+  # Control arm
+
+  km_ctrl <- survfit(Surv(time, status) ~ 1, 
+  data = ipd_merged[ipd_merged$treat == 0, ])
+
+  plot(
+    km_ctrl,
+    main = paste("Control arm: KM vs", mod),
+    xlab = "Time",
+    ylab = "Survival probability",
+    lty = 1,
+    col = "black",
+    mark.time = FALSE
+  )
+
+  lines(
+    fitted_models[[mod]],
+    newdata = data.frame(treat = 0),
+    type = "survival",
+    ci = FALSE,
+    lty = 1,
+    col = "blue"
+  )
+
+  # Treatment arm
+
+  km_trt <- survfit(Surv(time, status) ~ 1, 
+  data = ipd_merged[ipd_merged$treat == 1, ])
+
+  plot(
+    km_trt,
+    main = paste("Treatment arm: KM vs", mod),
+    xlab = "Time",
+    ylab = "Survival probability",
+    lty = 2,
+    mark.time = FALSE,
+    col = "black"
+  )
+
+  lines(
+    fitted_models[[mod]],
+    newdata = data.frame(treat = 1),
+    type = "survival",
+    ci = FALSE,
+    lty = 2,
+    col = "blue"
+  )
+
+  legend(
+    "bottomleft",
+    legend = c(
+      "Control - KM",
+      "Control - Fitted",
+      "Treatment - KM",
+      "Treatment - Fitted"
+    ),
+    col = c("black", "blue", "black", "blue"),
+    lty = c(1, 1, 2, 2),
+    lwd = 1,
+    bty = "n",
+    cex = 1.5
+  )
+
+}    
+
+
+```
+
+In conclusion, based on the graphical fit check, the Gompertz model provides the best fit to the observed trial data.
+
+
+#### Author Bio
+
+[Xin (David) Zhao, PhD](https://davidzhao1015.github.io/), integrates epidemiology, evidence synthesis, quantitative modeling, and health economics to develop transparent, reproducible analytics that support healthcare and biotech decision-making.

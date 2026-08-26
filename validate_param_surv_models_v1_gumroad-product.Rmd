@@ -87,27 +87,28 @@ invisible(lapply(required_pkgs, library, character.only = TRUE))
 ```{r}
 
 # Todo @Aug 24
-# 1. Add a model selection and validation summary that brings all evidence together
-# 2. Correct statistical interpretation and align with TSD14
-# 3. Update distribution names in list or vector objects (e.g., generalized gamma instead of gamma)
-# 4. For better readability, add callout boxes where applicable
-# 5. Add a clear user settings section near the beginning
-# 6. Package repeated operations into helper functions
-# 7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
-
+# **1. Add a model selection and validation summary that brings all evidence together
+# ***2. Correct statistical interpretation and align with TSD14
+# [Done] 3. Update distribution names in list or vector objects (e.g., generalized gamma instead of gamma)
+# *4. For better readability, add callout boxes where applicable
+# [Done] 5. Add a clear user settings section near the beginning
+# *6. Package repeated operations into helper functions
+# ***7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
 
 ```
 
 
 # User setting
 
-```{r}
+```{r user param}
 
 # Input files
 control_file <- "IPD_ctrl_gp.csv"
 treatment_file <- "IPD_treat_gp.csv"
 
+```
 
+```{r admin param}
 # Variables definition
 time_var <- "time"
 status_var <- "status"
@@ -119,15 +120,14 @@ candidate_model <- c(
   "exponential",
   "weibull",
   "gompertz",
-  "lnorm",
-  "llogis",
-  "gengamma"
+  "log-logistic",
+  "log-normal",
+  "generalized gamma"
 )
 
 
 # Horizon time definition (months)
 time_horizon <- 120
-
 
 ```
 
@@ -142,10 +142,10 @@ The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data fo
 ```{r input}
 
 # Control arm
-ipd_ctrl <- read.csv("IPD_ctrl_gp.csv")
+ipd_ctrl <- read.csv(control_file)
 
 # Treatment arm
-ipd_trt <- read.csv("IPD_treat_gp.csv")
+ipd_trt <- read.csv(treatment_file)
 
 # Merge data sets of two arms
 ipd_merged <- rbind(ipd_ctrl, ipd_trt)
@@ -260,7 +260,7 @@ data_list  <- list(
 
 
 # Define a vector of recommended parametric models for loop iterations
-distr_list <- c(
+distr_list_flexsurv <- c(
   "exponential",
   "weibull",
   "gompertz",
@@ -286,10 +286,12 @@ for (data_name in names(data_list)) {
 
   data <- data_list[[data_name]]
 
-  for (distr in distr_list) {
+  for (i in seq_along(candidate_model)) {
 
     tryCatch(
       {
+        distr = distr_list_flexsurv[i]
+        
         fit <- flexsurv::flexsurvreg(
           survival::Surv(time, status) ~ 1,
           data = data,
@@ -300,7 +302,7 @@ for (data_name in names(data_list)) {
           fit,
           type = "survival",
           ci = TRUE,
-          main = paste(distr, "vs KM"),
+          main = paste(candidate_model[i]),
           xlab = "",
           ylab = ""
         )
@@ -325,7 +327,7 @@ for (data_name in names(data_list)) {
       error = function(error_message) {
         warning(
           "Model failed for dataset '", data_name,
-          "' with distribution '", distr, "': ",
+          "' with distribution '", candidate_model[i], "': ",
           conditionMessage(error_message)
         )
       }
@@ -356,13 +358,30 @@ The upper and lower panels represent control and treatment arms, respectively. F
 
 The purpose of using Q-Q plot is to determine any specific distribution families are compatible with the observed data.
 
+```{r}
+
+distr_lsit_gofcens <- c(
+  "exponential",
+  "weibull",
+  "gompertz",
+  "lognormal",
+  "loglogistic",
+  "generalized gamma"
+)
+
+
+```
+
 
 ```{r, fig.show = "hold", out.width='30%', fig.width=4, fig.height=4, fig.align='center'}
 
-for (distr in distr_list) {
+
+for (i in seq_along(candidate_model)) {
   
   tryCatch(
     {
+      
+    distr <- distr_lsit_gofcens[i]
       
     GofCens::probPlot(
         ipd_ctrl$time,
@@ -417,10 +436,13 @@ for (data_name in names(data_list)) {
 
   data <- data_list[[data_name]]
 
-  for (distr in distr_list) {
+  for (i in seq_along(candidate_model)) {
 
     tryCatch(
       {
+        
+        distr <- distr_list_flexsurv[i]
+          
         # Fit parametric survival model
         fit <- flexsurv::flexsurvreg(
           survival::Surv(time, status) ~ 1,
@@ -440,7 +462,7 @@ for (data_name in names(data_list)) {
         plot(
           surv,
           fun = "cumhaz",
-          main = distr,
+          main = candidate_model[i],
           xlab = "",
           ylab = ""
         )
@@ -515,9 +537,9 @@ model_distr_list <- c(
   "exponential",
   "weibull",
   "gompertz",
-  "lognormal",
   "llogis",
-  "gamma"
+  "lognormal",
+  "gengamma"
 )
 
 fitted_models <- lapply(model_distr_list, function(distr) {

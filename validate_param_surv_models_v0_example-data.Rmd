@@ -455,7 +455,7 @@ For a well-fitting model, the estimated cumulative hazard of the Cox–Snell res
 
 ## Step 2. Fit a common parametric survival models with two arms
 
-Fit the full standard parametric family (Exponential, Weibull, Gompertz, Log-normal, Log-logistic, Generalized Gamma) and flexible alternatives where justified.
+Fit the same candidate distribution type to both arms, allowing arm-specific scale and, where appropriate, shape parameters. A treatment-covariate PH parameterization should be used only if PH is adequately supported. If different distribution families are selected for the two arms, provide strong statistical, biological and clinical justification.
 
 ```{r}
 
@@ -483,7 +483,9 @@ names(fitted_models) <- model_distr_list
 
 ### Step 3.1 Evaluate AIC of fitted models 
 
-Evaluate robustness of the fitted model using the information criteria, AIC. The smaller the AIC scores, the more robut a model fit to the observed data. 
+Evaluate relative fitness of the models fitted to the sameobserved data after accounting for model complexity, using the information criteria, AIC. 
+
+AIC does not establish absolute adequacy, robustness or the credibility of the extrapolated tail; those questions require graphical diagnostics, assessment of censoring, clinical plausibility and external validation.
 
 ```{r}
 
@@ -508,8 +510,7 @@ aic_df # gompertz has the lowest AIC value
 
 ```
 
-In line with the above graphics diagnostics, Gompertz model perform the best in fitting the observed trial data, among all the six model candidates.  
-
+Among the fitted candidates, Gompertz has the lowest AIC and therefore the strongest relative support for fit to the observed data after accounting for model complexity. 
 
 ### Step 3.2 Overall KM vs best fitted model 
 
@@ -596,7 +597,7 @@ for (mod in names(fitted_models)) {
 
 ```
 
-In conclusion, based on the graphical fit check, the Gompertz model provides the best fit to the observed trial data.
+Gompertz has favorable AIC and generally acceptable graphical fit within the observed period, but log-normal and log-logistic also remain plausible on some diagnostics. The evidence supports retaining a set of candidate models rather than declaring Gompertz uniquely best. Selection of a base-case model should additionally reflect the completeness of follow-up and the clinical plausibility of each extrapolated tail.
 
 ## Survival extrapolation and validation
 
@@ -695,6 +696,9 @@ ggplot(pr_long, aes(x = time,
 
 ```
 
+The extrapolated curves should not be considered validated solely because they fit the trial data. For each plausible model, report long-term survival and hazard predictions at decision-relevant time points and compare them with relevant registries, longer-term studies, background mortality, biological expectations and clinical-expert judgement. Discuss the comparability and limitations of each external source.
+
+The base-case extrapolation assumes constant treatment effect throughout the period of interest, but this assumption should be critically evaluated in light of treatment-effect duration. Because post-trial relative effects are uncertain, evaluate at least three scenarios: treatment effect stops at the end of observed follow-up, wanes over a clinically justified period, or persists over the lifetime horizon. The assumptions should be informed by observed hazards, mechanism of action and clinical advice.
 
 ## Model Selection & Validation Summary
 
@@ -707,8 +711,11 @@ ggplot(pr_long, aes(x = time,
 | **Log-logistic** | Not assessed in the hazard-structure analysis | Among the better graphical fits | Moderate deviation, particularly during mid-to-late follow-up | Better fit in the control arm; treatment-arm fit inferior to Gompertz | **2179.306; 5.675** | Not assessed | **Principal alternative for structural sensitivity analysis, subject to long-term plausibility** |
 | **Generalized gamma** | Not assessed in the hazard-structure analysis | Among the better graphical fits in later KM comparisons | Not evaluated | Not evaluated | 2191.250; 17.619 | Not assessed | **Evidence incomplete; further diagnostics required before assigning a scenario role** |
 
+Model selection should not be based on a single diagnostic. The provisional conclusions above synthesize structural assumptions, graphical fit, diagnostic plots, and information criteria. Long-term external plausibility was not assessed at this stage and should be considered before final model selection.
 
-Interpretation: Model selection should not be based on a single diagnostic. The provisional conclusions above synthesize structural assumptions, graphical fit, diagnostic plots, and information criteria. Long-term external plausibility was not assessed at this stage and should be considered before final model selection.
+## Structural Uncertainty and Scenario Analysis
+
+Use the most clinically credible model as the base case, but retain other plausible distributions and modelling structures as scenarios. Scenarios should vary the survival distribution, PH versus arm-specific/time-varying effects, treatment-effect duration, and—where indicated—piecewise or flexible modelling. Report the effect on extrapolated mean survival and cost-effectiveness outcomes; parameter uncertainty within each scenario should be represented probabilistically.
 
 
 #### Author Bio

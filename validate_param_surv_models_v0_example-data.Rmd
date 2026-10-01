@@ -84,54 +84,6 @@ invisible(lapply(required_pkgs, library, character.only = TRUE))
 ```
 
 
-```{r}
-
-# Todo @Aug 24
-# 1. Add a model selection and validation summary that brings all evidence together
-# 2. Correct statistical interpretation and align with TSD14
-# 3. Update distribution names in list or vector objects (e.g., generalized gamma instead of gamma)
-# 4. For better readability, add callout boxes where applicable
-# 5. Add a clear user settings section near the beginning
-# 6. Package repeated operations into helper functions
-# 7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
-
-
-```
-
-
-# User setting
-
-```{r}
-
-# Input files
-control_file <- "IPD_ctrl_gp.csv"
-treatment_file <- "IPD_treat_gp.csv"
-
-
-# Variables definition
-time_var <- "time"
-status_var <- "status"
-treat_var <- "treat"
-
-
-# Model candidate definition
-candidate_model <- c(
-  "exponential",
-  "weibull",
-  "gompertz",
-  "lnorm",
-  "llogis",
-  "gengamma"
-)
-
-
-# Horizon time definition (months)
-time_horizon <- 120
-
-
-```
-
-
 ## Input data
 
 The input data, censored time-to-event data (locoregional control), were digitized from an RCT study by 
@@ -237,12 +189,11 @@ legend("topleft",
 
 
 ```
-The left plot showed that cumulative hazards appeared to transition around 10-20 months, indicating the hazard is constant over the follow-up duration.
+The hazard curve (left) change slope around 10–20 months, suggesting that the hazard may vary over follow-up. A constant-hazard exponential model therefore appears questionable over the full period. Piecewise or more flexible models may warrant consideration.
 
-The right plot showed that cumulative hazards increased over time, suggesting the Weibull and Gompertz distribution assumptions may be reasonable.
+On the log-cumulative-hazard scale (right), approximate linearity over a sustained interval would support further consideration of Weibull-type models. The apparent early and later departures from linearity should be examined before concluding that one distribution is suitable. Gompertz and other families should be evaluated using appropriate distribution-specific diagnostics.
 
-In addition, proportional hazards are valid across the two arms in the right plot.
-
+The treatment-arm curves (right) appear approximately parallel over parts of follow-up, but early instability and possible time-varying separation mean that PH is not clearly established. PH should be considered provisional and assessed alongside suitable residual-based tests, clinical expertise. If PH is not adequately supported, arm-specific or time-varying approaches should be considered.
 
 
 ### Step 1.2 Overlap KM vs parametric models 
@@ -350,7 +301,7 @@ mtext(
 
 ```
 
-The upper and lower panels represent control and treatment arms, respectively. From visual inspection, the Gompertz, log-normal, and log-logistic models/curves appear to fit the observed trial data better than the exponential and Weibull models.
+Within the observed period, Gompertz, log-normal and log-logistic appear visually closer to the KM estimates than exponential or Weibull. This is only a preliminary internal-fit assessment. Interpretation should account for numbers at risk and censoring, particularly in the tail, and should be combined with statistical diagnostics and assessment of long-term plausibility.
 
 ### Step 1.3 Q-Q plot for right censored data
 
@@ -398,7 +349,7 @@ for (distr in distr_list) {
 
 ```
 
-However, `GofCens` cannot support the Gompertz distribution. Moderate deviations appeared for the exponential, Weibull, log-normal, and log-logistic distributions, especially in mid-to-late follow-up. 
+The censored Q–Q plots show departures from the reference line for each evaluated family, particularly at later quantiles where information may be sparse. These plots do not clearly identify a single preferred distribution and should be treated as screening evidence alongside arm-specific hazard plots, residual diagnostics, AIC/BIC and clinical plausibility. Gompertz cannot be evaluated by this implementation due to software limitations and should be assessed using other diagnostics.
 
 ### Step 1.4 Residual plot (Cox-snell)
 
@@ -499,9 +450,7 @@ mtext(
 
 ```
 
-The red straight line represents a perfect goodness-of-fit between the model and the observed data. By comparing the black lines of individual models with specific distributional assumptions, we can see that Gompertz, log-normal, and log-logistic performed better for the Control arm, while Gompertz alone may have best fit the observed survival data in the Treatment arm among all model candidates. 
-
-In addition, the Cox-Snell residual is a scientifically proven measure suitable for censored survival data. 
+For a well-fitting model, the estimated cumulative hazard of the Cox–Snell residuals should lie approximately along the 45° line. Several candidates track the line over much of the observed range, with differing localized departures and increasing uncertainty toward the tail. These plots provide no definitive basis on their own for selecting a particular distribution and should be interpreted with the other diagnostics.
 
 
 ## Step 2. Fit a common parametric survival models with two arms
@@ -517,7 +466,7 @@ model_distr_list <- c(
   "gompertz",
   "lognormal",
   "llogis",
-  "gamma"
+  "gengamma"
 )
 
 fitted_models <- lapply(model_distr_list, function(distr) {
@@ -648,6 +597,118 @@ for (mod in names(fitted_models)) {
 ```
 
 In conclusion, based on the graphical fit check, the Gompertz model provides the best fit to the observed trial data.
+
+## Survival extrapolation and validation
+
+
+```{r}
+
+require(tidyr)
+require(dplyr)
+require(ggplot2)
+
+
+times <- 0:120
+
+pr_long <- dplyr::data_frame()
+
+for (mod in names(fitted_models)) {
+  
+  pr <- summary(fitted_models[[mod]], 
+              newdata = data.frame(treat = c(0, 1)),
+              type = "survival", 
+              t = times)
+
+  pr_control <- as.data.frame(pr[[1]]) |>
+    dplyr::mutate(group = "Control") |>
+    dplyr::mutate(model = mod)
+
+  pr_treatment <- as.data.frame(pr[[2]]) |>
+    dplyr::mutate(group = "Treatment") |>
+    dplyr::mutate(model = mod)
+  
+  pr_long <- dplyr::bind_rows(
+    pr_long,
+    pr_control,
+    pr_treatment
+)
+  
+}
+
+
+```
+
+
+
+
+```{r}
+
+head(pr_long, 10)
+
+```
+
+
+```{r}
+
+
+ggplot(pr_long, aes(x = time, 
+                    y = est, 
+                    color = model, 
+                    group = model)) +
+  geom_vline(
+    xintercept = 50,
+    color = "grey50",
+    linetype = "dashed",
+    linewidth = 0.8
+  ) +
+  geom_line(linewidth = 1) +
+  facet_wrap(
+    ~ group, 
+    nrow = 1) + 
+  scale_color_brewer(
+    palette = "Dark2",
+    name = "Model"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25)
+  ) +
+  labs(
+    x = "Time",
+    y = "Survival probability"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    legend.title.position = "top",
+    legend.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = grid::unit(1, "cm")
+  ) +
+  guides(
+    color = guide_legend(
+      nrow = 2,
+      byrow = TRUE
+    )
+  )
+  
+
+```
+
+
+## Model Selection & Validation Summary
+
+| Model | Hazard / structural evidence | KM graphical fit | Q-Q diagnostic | Cox-Snell diagnostic | AIC; ΔAIC | External plausibility | Provisional conclusion |
+|:------|:-----------------------------|:-----------------|:---------------|:----------------------|:----------|:----------------------|:-----------------------|
+| **Exponential** | Constant-hazard assumption not convincingly supported | Less favorable than Gompertz, log-normal, and log-logistic | Moderate deviation, particularly during mid-to-late follow-up | Less favorable than leading models; arm-specific departures observed | 2215.113; 41.482 | Not assessed | **Not preferred based on internal fit** |
+| **Weibull** | Monotonic hazard structure potentially plausible | Less favorable than Gompertz, log-normal, and log-logistic | Moderate deviation, particularly during mid-to-late follow-up | Less favorable than leading models | 2204.574; 30.943 | Not assessed | **Structurally plausible, but with relatively weak internal-fit support** |
+| **Gompertz** | Monotonic hazard structure potentially plausible | Best or among the best graphical fits | Not evaluated due to GofCens limitation | Better fit in the control arm and best fit in the treatment arm | **2173.631; 0.000** | Not assessed | **Provisional preferred model based on internal fit only** |
+| **Log-normal** | Not assessed in the hazard-structure analysis | Among the better graphical fits | Moderate deviation, particularly during mid-to-late follow-up | Better fit in the control arm; treatment-arm fit inferior to Gompertz | 2198.150; 24.519 | Not assessed | **Potential alternative, but with weaker overall internal-fit support** |
+| **Log-logistic** | Not assessed in the hazard-structure analysis | Among the better graphical fits | Moderate deviation, particularly during mid-to-late follow-up | Better fit in the control arm; treatment-arm fit inferior to Gompertz | **2179.306; 5.675** | Not assessed | **Principal alternative for structural sensitivity analysis, subject to long-term plausibility** |
+| **Generalized gamma** | Not assessed in the hazard-structure analysis | Among the better graphical fits in later KM comparisons | Not evaluated | Not evaluated | 2191.250; 17.619 | Not assessed | **Evidence incomplete; further diagnostics required before assigning a scenario role** |
+
+
+Interpretation: Model selection should not be based on a single diagnostic. The provisional conclusions above synthesize structural assumptions, graphical fit, diagnostic plots, and information criteria. Long-term external plausibility was not assessed at this stage and should be considered before final model selection.
 
 
 #### Author Bio

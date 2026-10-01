@@ -87,35 +87,66 @@ invisible(lapply(required_pkgs, library, character.only = TRUE))
 ```{r}
 
 # Todo @Aug 24
-# **1. Add a model selection and validation summary that brings all evidence together
-# ***2. Correct statistical interpretation and align with TSD14
+
+# ***1. Add a model selection and validation summary that brings all evidence together
+
+# [Applicable only to example notebook] 2. Correct statistical interpretation and align with TSD14
+
 # [Done] 3. Update distribution names in list or vector objects (e.g., generalized gamma instead of gamma)
-# *4. For better readability, add callout boxes where applicable
+
+# **4. For better readability, add callout boxes where applicable
+
 # [Done] 5. Add a clear user settings section near the beginning
+
 # *6. Package repeated operations into helper functions
-# ***7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
+
+# [Done] 7. Add the missing extrapolation and external validity layer (e.g., plot candidate survival curves beyond observed follow-up; introduce questions)
 
 ```
 
 
 # User setting
 
+## Requirements for input data format
+
+Before loading your input data, please check whether the format or layout of the input fulfill exactly the requirements as below. 
+
+Input data example:
+
+| time    | status | treat |
+|--------:|-------:|------:|
+| 0.00274 | 1      | 1     |
+| 0.00274 | 1      | 0     |
+| 0.26100 | 1      | 0     |
+| 0.77900 | 1      | 0     |
+| 0.77900 | 1      | 0     |
+| 0.77900 | 1      | 0     |
+| 1.03450 | 0      | 0     |
+| 1.29000 | 1      | 0     |
+| 1.81000 | 1      | 0     |
+| 2.07000 | 1      | 0     |
+
+- `time` represents follow-up time (eg. months in the example)
+- `status`: 1 and 0 represent event and censored, respectively
+- `treat`: 1 and 0 represent treatment and control, respectively.
+
+
 ```{r user param}
 
-# Input files
+# Enter absolute or relative file locations
 control_file <- "IPD_ctrl_gp.csv"
 treatment_file <- "IPD_treat_gp.csv"
 
 ```
 
+```{r}
+# Horizon time definition (months)
+time_horizon <- 120
+```
+
 ```{r admin param}
-# Variables definition
-time_var <- "time"
-status_var <- "status"
-treat_var <- "treat"
 
-
-# Model candidate definition
+# Pre-defined parametric survival models - Please keep unchanged or code will disrupt
 candidate_model <- c(
   "exponential",
   "weibull",
@@ -125,19 +156,10 @@ candidate_model <- c(
   "generalized gamma"
 )
 
-
-# Horizon time definition (months)
-time_horizon <- 120
-
 ```
 
 
 ## Input data
-
-The input data, censored time-to-event data (locoregional control), were digitized from an RCT study by 
-[Bonner et al, 2006](https://www.nejm.org/doi/full/10.1056/NEJMoa053422), which investigated the effect of cetuximab treatment on patients with head and neck cancer.
-
-The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data for the control (n=213) and treatment (n=211) arms, with follow-up duration of 50 months.
 
 ```{r input}
 
@@ -152,13 +174,6 @@ ipd_merged <- rbind(ipd_ctrl, ipd_trt)
 
 
 ```
-
-
-Inspect the first rows of the combined dataset. The column
-
-- `time` represents follow-up time in months
-- `status`: 1 and 0 represent event and censored, respectively
-- `treat`: 1 and 0 represent treatment and control, respectively.
 
 
 ```{r inpur inspect}
@@ -237,13 +252,6 @@ legend("topleft",
 
 
 ```
-The left plot showed that cumulative hazards appeared to transition around 10-20 months, indicating the hazard is constant over the follow-up duration.
-
-The right plot showed that cumulative hazards increased over time, suggesting the Weibull and Gompertz distribution assumptions may be reasonable.
-
-In addition, proportional hazards are valid across the two arms in the right plot.
-
-
 
 ### Step 1.2 Overlap KM vs parametric models 
 
@@ -352,7 +360,7 @@ mtext(
 
 ```
 
-The upper and lower panels represent control and treatment arms, respectively. From visual inspection, the Gompertz, log-normal, and log-logistic models/curves appear to fit the observed trial data better than the exponential and Weibull models.
+The upper and lower panels represent control and treatment arms, respectively. 
 
 ### Step 1.3 Q-Q plot for right censored data
 
@@ -417,12 +425,9 @@ for (i in seq_along(candidate_model)) {
 
 ```
 
-However, `GofCens` cannot support the Gompertz distribution. Moderate deviations appeared for the exponential, Weibull, log-normal, and log-logistic distributions, especially in mid-to-late follow-up. 
-
 ### Step 1.4 Residual plot (Cox-snell)
 
 The residual graphics can detect any systematic lack of fit in any candidate.
-
 
 ```{r}
 
@@ -521,10 +526,7 @@ mtext(
 
 ```
 
-The red straight line represents a perfect goodness-of-fit between the model and the observed data. By comparing the black lines of individual models with specific distributional assumptions, we can see that Gompertz, log-normal, and log-logistic performed better for the Control arm, while Gompertz alone may have best fit the observed survival data in the Treatment arm among all model candidates. 
-
-In addition, the Cox-Snell residual is a scientifically proven measure suitable for censored survival data. 
-
+The red straight line represents a perfect goodness-of-fit between the model and the observed data. In addition, the Cox-Snell residual is a scientifically proven measure suitable for censored survival data. 
 
 ## Step 2. Fit a common parametric survival models with two arms
 
@@ -581,12 +583,9 @@ aic_df # gompertz has the lowest AIC value
 
 ```
 
-In line with the above graphics diagnostics, Gompertz model perform the best in fitting the observed trial data, among all the six model candidates.  
-
-
 ### Step 3.2 Overall KM vs best fitted model 
 
-As a complemment evaluation, we visually inspect the fitted model curves, by comparing with non-parametric Kaplan-Meier curves for Control and Treatment arms, separately. 
+As complementary evaluation, we visually inspect the fitted model curves, by comparing with non-parametric Kaplan-Meier curves for Control and Treatment arms, separately. 
 
 
 ```{r, fig.width=14, fig.height=7, out.width='65%'}
@@ -669,7 +668,104 @@ for (mod in names(fitted_models)) {
 
 ```
 
-In conclusion, based on the graphical fit check, the Gompertz model provides the best fit to the observed trial data.
+
+## Survival extrapolation and validation
+
+
+```{r}
+
+require(tidyr)
+require(dplyr)
+require(ggplot2)
+
+
+times <- 0:120
+
+pr_long <- dplyr::data_frame()
+
+for (mod in names(fitted_models)) {
+  
+  pr <- summary(fitted_models[[mod]], 
+              newdata = data.frame(treat = c(0, 1)),
+              type = "survival", 
+              t = times)
+
+  pr_control <- as.data.frame(pr[[1]]) |>
+    dplyr::mutate(group = "Control") |>
+    dplyr::mutate(model = mod)
+
+  pr_treatment <- as.data.frame(pr[[2]]) |>
+    dplyr::mutate(group = "Treatment") |>
+    dplyr::mutate(model = mod)
+  
+  pr_long <- dplyr::bind_rows(
+    pr_long,
+    pr_control,
+    pr_treatment
+)
+  
+}
+
+
+
+
+```
+
+
+```{r}
+
+head(pr_long, 10)
+
+```
+
+
+```{r}
+
+
+ggplot(pr_long, aes(x = time, 
+                    y = est, 
+                    color = model, 
+                    group = model)) +
+  geom_vline(
+    xintercept = 50,
+    color = "grey50",
+    linetype = "dashed",
+    linewidth = 0.8
+  ) +
+  geom_line(linewidth = 1) +
+  facet_wrap(
+    ~ group, 
+    nrow = 1) + 
+  scale_color_brewer(
+    palette = "Dark2",
+    name = "Model"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25)
+  ) +
+  labs(
+    x = "Time",
+    y = "Survival probability"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    legend.title.position = "top",
+    legend.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = grid::unit(1, "cm")
+  ) +
+  guides(
+    color = guide_legend(
+      nrow = 2,
+      byrow = TRUE
+    )
+  )
+  
+
+```
+
 
 
 #### Author Bio

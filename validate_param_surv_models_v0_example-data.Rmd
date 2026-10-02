@@ -1,9 +1,9 @@
 ---
 title: "Survival Model Selection and Validation for HEOR in R"
-subtitle: "An HTA-aligned workflow for fitting, diagnosing, comparing, and justifying parameteric survival models"
+subtitle: "An HTA-aligned workflow for fitting, diagnosing, comparing, and justifying parametric survival models"
 author: "Xin (David) Zhao"
 date: "2026-08-17"
-output: 
+output:
     html_document:
         toc: TRUE
         code_folding: "show"
@@ -26,7 +26,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align='
 
 In health economic evaluations such as cost-effectiveness analyses, estimating the long-term health benefits of innovative treatments over a lifetime horizon is essential. However, randomized controlled trials (RCTs) typically have short follow-up periods. Therefore, following health technology assessment (HTA) guidelines, it is important to extrapolate survival data in a statistically robust and clinically justified manner to predict life expectancy for both new treatments and standard care.
 
-This R notebook provides a reusable, HTA-oriented framework showing analysts not only how to fit survival models in R, but how to evaluate, compare, interpret, and defend the model selected for economic evaluation.
+This R notebook provides a reusable, HTA-oriented framework for fitting survival models in R and for evaluating, interpreting, and defending the model selected for economic evaluation.
 
 ## Defensible workflow and R tools
 
@@ -54,11 +54,11 @@ Assess whether the extrapolated curves are clinically plausible, consistent with
 
 ### R packages
 
-Three credible specialized R packages were used to implement the workflow,
+Three specialized R packages were used to implement the workflow:
 
-* `survival`: Fit Kaplan-Meier curves and visualizations (eg., cumulative hazard plot)
-* `flexsurv`: Fit parametric and flexible survival models, residual diagnosis, and visualizations
-* `GofCens`: Assess goodness-of-fit and visualizations
+* `survival`: Fit Kaplan-Meier curves and create visualizations (e.g., cumulative hazard plots)
+* `flexsurv`: Fit parametric and flexible survival models, perform residual diagnostics, and create visualizations
+* `GofCens`: Assess goodness of fit and create visualizations
 
 
 ```{r packages}
@@ -86,10 +86,10 @@ invisible(lapply(required_pkgs, library, character.only = TRUE))
 
 ## Input data
 
-The input data, censored time-to-event data (locoregional control), were digitized from an RCT study by 
-[Bonner et al, 2006](https://www.nejm.org/doi/full/10.1056/NEJMoa053422), which investigated the effect of cetuximab treatment on patients with head and neck cancer.
+The input data, censored time-to-event data (locoregional control), were digitized from an RCT by
+[Bonner et al., 2006](https://www.nejm.org/doi/full/10.1056/NEJMoa053422), which investigated the effect of cetuximab treatment on patients with head and neck cancer.
 
-The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data for the control (n=213) and treatment (n=211) arms, with follow-up duration of 50 months.
+The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data for the control (n=213) and treatment (n=211) arms, with a 50-month follow-up.
 
 ```{r input}
 
@@ -99,23 +99,23 @@ ipd_ctrl <- read.csv("IPD_ctrl_gp.csv")
 # Treatment arm
 ipd_trt <- read.csv("IPD_treat_gp.csv")
 
-# Merge data sets of two arms
+# Merge the datasets from the two arms
 ipd_merged <- rbind(ipd_ctrl, ipd_trt)
 
 
 ```
 
 
-Inspect the first rows of the combined dataset. The column
+Inspect the first rows of the combined dataset. The columns are defined as follows:
 
-- `time` represents follow-up time in months
-- `status`: 1 and 0 represent event and censored, respectively
-- `treat`: 1 and 0 represent treatment and control, respectively.
+- `time`: Follow-up time in months.
+- `status`: 1 indicates an event; 0 indicates censoring.
+- `treat`: 1 indicates treatment; 0 indicates control.
 
 
-```{r inpur inspect}
+```{r input inspect}
 
-# Inspect first rows of the merged data set
+# Inspect the first rows of the merged dataset
 head(ipd_merged, 15)
 
 ```
@@ -125,13 +125,12 @@ head(ipd_merged, 15)
 
 Use graphical and statistical tools to determine which survival and hazard shapes are plausible before selecting a model.
 
-### Step 1.1 Log cumulative hazard plot 
+### Step 1.1 Log cumulative hazard plot
 
 A (log) cumulative hazard plot is recommended to answer key questions:
 
-- Are proportional hazards reasonable?
-- What hazard shape is supported?
-
+- What hazard structure is supported?
+- Are proportional hazards (PH) reasonable?
 
 ```{r log-cum-hazard km}
 
@@ -144,7 +143,6 @@ surv_km <- survival::survfit(Surv(time, status) ~ treat,
 ```
 
 To assess whether hazards are constant over time (e.g., exponential distribution), plot cumulative hazard versus time. To evaluate monotonic changes in hazard (e.g., Weibull and Gompertz distributions), plot the logarithm of cumulative hazard against the logarithm of time.
-
 
 ```{r log-cum-hazard plots, fig.cap="Figure 1. Log cumulative hazard plots for the control and treatment arms."}
 
@@ -169,7 +167,7 @@ legend("topleft",
   bty = "n"
 )
 
-# Log both axis
+# Use logarithmic scales for both axes
 plot(surv_km,
   fun = "cumhaz", 
   log = "xy",
@@ -189,21 +187,22 @@ legend("topleft",
 
 
 ```
-The hazard curve (left) change slope around 10–20 months, suggesting that the hazard may vary over follow-up. A constant-hazard exponential model therefore appears questionable over the full period. Piecewise or more flexible models may warrant consideration.
 
-On the log-cumulative-hazard scale (right), approximate linearity over a sustained interval would support further consideration of Weibull-type models. The apparent early and later departures from linearity should be examined before concluding that one distribution is suitable. Gompertz and other families should be evaluated using appropriate distribution-specific diagnostics.
+The cumulative hazard curves (left) change slope around 10–20 months, suggesting that the hazard may vary over follow-up. A constant-hazard exponential model therefore appears questionable over the full period. Piecewise or more flexible models may be worth considering.
 
-The treatment-arm curves (right) appear approximately parallel over parts of follow-up, but early instability and possible time-varying separation mean that PH is not clearly established. PH should be considered provisional and assessed alongside suitable residual-based tests, clinical expertise. If PH is not adequately supported, arm-specific or time-varying approaches should be considered.
+On the log-cumulative-hazard scale (right), approximate linearity over a sustained interval would support further consideration of Weibull-type models. Examine the apparent early and later departures from linearity before concluding that one distribution is suitable. Evaluate Gompertz and other families using appropriate distribution-specific diagnostics.
+
+The treatment-arm curves (right) appear approximately parallel over parts of follow-up, but early instability and possible time-varying separation mean that PH is not clearly established. Consider PH provisional and assess it alongside suitable residual-based tests and clinical expertise. If PH is not adequately supported, consider arm-specific or time-varying approaches.
 
 
-### Step 1.2 Overlap KM vs parametric models 
+### Step 1.2 Overlay KM curves and parametric model curves
 
-The purpose of overlapping KM curves with the chosen parametric model curves is to evaluate goodness-of-fit for various parametric survival model candidates visually.
+Overlaying KM curves and fitted parametric model curves allows visual assessment of goodness of fit for candidate parametric survival models.
 
 
 ```{r}
 
-# Define a vector of data sets of two arms for loop iterations
+# Define a list of datasets for the two arms for loop iterations
 data_list  <- list(
   ipd_ctrl = ipd_ctrl,
   ipd_trt = ipd_trt
@@ -301,12 +300,13 @@ mtext(
 
 ```
 
-Within the observed period, Gompertz, log-normal and log-logistic appear visually closer to the KM estimates than exponential or Weibull. This is only a preliminary internal-fit assessment. Interpretation should account for numbers at risk and censoring, particularly in the tail, and should be combined with statistical diagnostics and assessment of long-term plausibility.
+Within the observed period, Gompertz, log-normal, and log-logistic appear visually closer to the KM estimates than exponential or Weibull. This is only a preliminary internal-fit assessment. Interpretation should account for numbers at risk and censoring, particularly in the tail, and should be combined with statistical diagnostics and assessment of long-term plausibility.
 
-### Step 1.3 Q-Q plot for right censored data
+### Step 1.3 Q-Q plots for right-censored data
 
-The purpose of using Q-Q plot is to determine any specific distribution families are compatible with the observed data.
+The purpose of using Q-Q plots is to determine whether specific distribution families are compatible with the observed data.
 
+Below are the Q-Q plots for the control arm. Similar plots can be generated for the treatment arm to assess the fit of candidate distributions across both study groups.
 
 ```{r, fig.show = "hold", out.width='30%', fig.width=4, fig.height=4, fig.align='center'}
 
@@ -349,12 +349,11 @@ for (distr in distr_list) {
 
 ```
 
-The censored Q–Q plots show departures from the reference line for each evaluated family, particularly at later quantiles where information may be sparse. These plots do not clearly identify a single preferred distribution and should be treated as screening evidence alongside arm-specific hazard plots, residual diagnostics, AIC/BIC and clinical plausibility. Gompertz cannot be evaluated by this implementation due to software limitations and should be assessed using other diagnostics.
+The censored Q–Q plots show departures from the reference line for each evaluated family, particularly at later quantiles where information may be sparse. These plots do not clearly identify a single preferred distribution and should be treated as screening evidence alongside arm-specific hazard plots, residual diagnostics, AIC/BIC, and clinical plausibility. This implementation cannot evaluate Gompertz due to software limitations, so assess it using other diagnostics.
 
-### Step 1.4 Residual plot (Cox-snell)
+### Step 1.4 Residual plots (Cox-Snell)
 
-The residual graphics can detect any systematic lack of fit in any candidate.
-
+Residual plots can detect systematic lack of fit in candidate models.
 
 ```{r}
 
@@ -450,12 +449,11 @@ mtext(
 
 ```
 
-For a well-fitting model, the estimated cumulative hazard of the Cox–Snell residuals should lie approximately along the 45° line. Several candidates track the line over much of the observed range, with differing localized departures and increasing uncertainty toward the tail. These plots provide no definitive basis on their own for selecting a particular distribution and should be interpreted with the other diagnostics.
+For a well-fitting model, the estimated cumulative hazard of the Cox–Snell residuals should lie approximately along the 45° line. Several candidates track the line over much of the observed range, with differing localized departures and increasing uncertainty toward the tail. These plots provide no definitive basis for selecting a particular distribution on their own and should be interpreted with the other diagnostics.
 
+## Step 2. Fit common parametric survival models to both arms
 
-## Step 2. Fit a common parametric survival models with two arms
-
-Fit the same candidate distribution type to both arms, allowing arm-specific scale and, where appropriate, shape parameters. A treatment-covariate PH parameterization should be used only if PH is adequately supported. If different distribution families are selected for the two arms, provide strong statistical, biological and clinical justification.
+Fit the same candidate distribution type to both arms, allowing arm-specific scale and, where appropriate, shape parameters. Use a treatment-covariate PH parameterization only if PH is adequately supported. If you select different distribution families for the two arms, provide strong statistical, biological, and clinical justification.
 
 ```{r}
 
@@ -481,9 +479,11 @@ names(fitted_models) <- model_distr_list
 
 ```
 
-### Step 3.1 Evaluate AIC of fitted models 
+## Step 3.Evaluate statistical fit & graphical diagnostics
 
-Evaluate relative fitness of the models fitted to the sameobserved data after accounting for model complexity, using the information criteria, AIC. 
+### Step 3.1 Evaluate the AIC of fitted models
+
+Evaluate the relative fit of models fitted to the same observed data, accounting for model complexity, using the Akaike information criterion (AIC).
 
 AIC does not establish absolute adequacy, robustness or the credibility of the extrapolated tail; those questions require graphical diagnostics, assessment of censoring, clinical plausibility and external validation.
 
@@ -499,7 +499,7 @@ aic_df <- data.frame(
   AIC = aic_values
 )
 
-# Drop row name
+# Drop row names
 rownames(aic_df) <- NULL
 
 # Sort the data frame by AIC values in ascending order
@@ -510,11 +510,11 @@ aic_df # gompertz has the lowest AIC value
 
 ```
 
-Among the fitted candidates, Gompertz has the lowest AIC and therefore the strongest relative support for fit to the observed data after accounting for model complexity. 
+Among the fitted candidates, Gompertz has the lowest AIC and therefore the strongest relative support for fit to the observed data after accounting for model complexity.
 
-### Step 3.2 Overall KM vs best fitted model 
+### Step 3.2 Compare KM curves with fitted models
 
-As a complemment evaluation, we visually inspect the fitted model curves, by comparing with non-parametric Kaplan-Meier curves for Control and Treatment arms, separately. 
+As a complementary evaluation, we visually inspect the fitted model curves by comparing them with nonparametric Kaplan-Meier curves for the control and treatment arms separately.
 
 
 ```{r, fig.width=14, fig.height=7, out.width='65%'}
@@ -597,10 +597,14 @@ for (mod in names(fitted_models)) {
 
 ```
 
-Gompertz has favorable AIC and generally acceptable graphical fit within the observed period, but log-normal and log-logistic also remain plausible on some diagnostics. The evidence supports retaining a set of candidate models rather than declaring Gompertz uniquely best. Selection of a base-case model should additionally reflect the completeness of follow-up and the clinical plausibility of each extrapolated tail.
+Gompertz has favorable AIC and generally acceptable graphical fit within the observed period, but log-normal and log-logistic also remain plausible on some diagnostics. The evidence supports retaining a set of candidate models rather than declaring Gompertz uniquely best. Selecting a base-case model should also reflect the completeness of follow-up and the clinical plausibility of each extrapolated tail.
 
-## Survival extrapolation and validation
 
+## Step 4. Evaluate external validity & decision uncertainty
+
+### Step 4.1 Survival extrapolation and validation
+
+To evaluate impact of different survival models on extrapolated survival estimates, we generate long-term survival predictions for each fitted model and compare them graphically. Assume constant treatment effect beyond the observed follow-up period.
 
 ```{r}
 
@@ -638,8 +642,6 @@ for (mod in names(fitted_models)) {
 
 
 ```
-
-
 
 
 ```{r}
@@ -696,11 +698,15 @@ ggplot(pr_long, aes(x = time,
 
 ```
 
-The extrapolated curves should not be considered validated solely because they fit the trial data. For each plausible model, report long-term survival and hazard predictions at decision-relevant time points and compare them with relevant registries, longer-term studies, background mortality, biological expectations and clinical-expert judgement. Discuss the comparability and limitations of each external source.
+Do not consider extrapolated curves validated solely because they fit the trial data. For each plausible model, report long-term survival and hazard predictions at decision-relevant time points, and compare them with relevant registries, longer-term studies, background mortality, biological expectations, and clinical-expert judgment. Discuss the comparability and limitations of each external source.
 
-The base-case extrapolation assumes constant treatment effect throughout the period of interest, but this assumption should be critically evaluated in light of treatment-effect duration. Because post-trial relative effects are uncertain, evaluate at least three scenarios: treatment effect stops at the end of observed follow-up, wanes over a clinically justified period, or persists over the lifetime horizon. The assumptions should be informed by observed hazards, mechanism of action and clinical advice.
+The base-case extrapolation assumes constant treatment effect throughout the period of interest, but this assumption should be critically evaluated in light of treatment-effect duration. Because post-trial relative effects are uncertain, evaluate at least three scenarios: treatment effect stops at the end of observed follow-up, wanes over a clinically justified period, or persists over the lifetime horizon. Inform the assumptions with observed hazards, mechanism of action, and clinical advice.
 
-## Model Selection & Validation Summary
+### Step 4.2 Structural uncertainty and scenario analysis
+
+Use the most clinically credible model as the base case, but retain other plausible distributions and modeling structures as scenarios. Scenarios should vary the survival distribution, PH versus arm-specific/time-varying effects, treatment-effect duration, and—where indicated—piecewise or flexible modeling. Report the effect on extrapolated mean survival and cost-effectiveness outcomes; parameter uncertainty within each scenario should be represented probabilistically.
+
+## Model selection & validation Summary
 
 | Model | Hazard / structural evidence | KM graphical fit | Q-Q diagnostic | Cox-Snell diagnostic | AIC; ΔAIC | External plausibility | Provisional conclusion |
 |:------|:-----------------------------|:-----------------|:---------------|:----------------------|:----------|:----------------------|:-----------------------|
@@ -713,11 +719,7 @@ The base-case extrapolation assumes constant treatment effect throughout the per
 
 Model selection should not be based on a single diagnostic. The provisional conclusions above synthesize structural assumptions, graphical fit, diagnostic plots, and information criteria. Long-term external plausibility was not assessed at this stage and should be considered before final model selection.
 
-## Structural Uncertainty and Scenario Analysis
 
-Use the most clinically credible model as the base case, but retain other plausible distributions and modelling structures as scenarios. Scenarios should vary the survival distribution, PH versus arm-specific/time-varying effects, treatment-effect duration, and—where indicated—piecewise or flexible modelling. Report the effect on extrapolated mean survival and cost-effectiveness outcomes; parameter uncertainty within each scenario should be represented probabilistically.
+#### Author biography
 
-
-#### Author Bio
-
-[Xin (David) Zhao, PhD](https://davidzhao1015.github.io/), integrates epidemiology, evidence synthesis, quantitative modeling, and health economics to develop transparent, reproducible analytics that support healthcare and biotech decision-making.
+[Xin (David) Zhao, PhD](https://davidzhao1015.github.io/) integrates epidemiology, evidence synthesis, quantitative modeling, and health economics to develop transparent, reproducible analytics that support healthcare and biotech decision-making.

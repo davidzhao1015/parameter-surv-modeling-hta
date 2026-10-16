@@ -4,15 +4,9 @@ subtitle: "A practical workflow for fitting, diagnosing, comparing, and justifyi
 author: "Xin (David) Zhao"
 date: "2026-08-17"
 output:
-    html_document:
-        toc: TRUE
-        code_folding: "show"
-        code_download: TRUE
-        theme:
-            bg: "#FFFFFF"
-            fg: "#24292F"
-            base_font:
-                google: "Inter"
+  github_document:
+    toc: true
+    html_preview: false
 ---
 
 ```{r setup, include = FALSE}

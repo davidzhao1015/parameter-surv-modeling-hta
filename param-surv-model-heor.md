@@ -626,14 +626,14 @@ head(pr_long, 10)
     ##    <int> <dbl> <dbl> <dbl> <chr>   <chr>      
     ##  1     0 1     1     1     Control exponential
     ##  2     1 0.966 0.960 0.971 Control exponential
-    ##  3     2 0.934 0.922 0.943 Control exponential
-    ##  4     3 0.902 0.885 0.916 Control exponential
-    ##  5     4 0.872 0.850 0.890 Control exponential
-    ##  6     5 0.842 0.816 0.864 Control exponential
-    ##  7     6 0.814 0.783 0.839 Control exponential
-    ##  8     7 0.786 0.752 0.815 Control exponential
-    ##  9     8 0.760 0.722 0.792 Control exponential
-    ## 10     9 0.734 0.694 0.769 Control exponential
+    ##  3     2 0.934 0.922 0.944 Control exponential
+    ##  4     3 0.902 0.885 0.917 Control exponential
+    ##  5     4 0.872 0.850 0.891 Control exponential
+    ##  6     5 0.842 0.816 0.865 Control exponential
+    ##  7     6 0.814 0.784 0.840 Control exponential
+    ##  8     7 0.786 0.752 0.816 Control exponential
+    ##  9     8 0.760 0.722 0.793 Control exponential
+    ## 10     9 0.734 0.694 0.770 Control exponential
 
 ``` r
 ggplot(pr_long, aes(x = time, 

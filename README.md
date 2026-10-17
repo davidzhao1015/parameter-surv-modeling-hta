@@ -1,3 +1,3 @@
 In health economic evaluations such as cost-effectiveness analyses, estimating the long-term health benefits of innovative treatments over a lifetime horizon is essential. However, randomized controlled trials (RCTs) typically have short follow-up periods. Therefore, following health technology assessment (HTA) guidelines, it is important to extrapolate survival data in a statistically robust and clinically justified manner to predict life expectancy for both new treatments and standard care.
 
-This R notebook provides a reusable, HTA-oriented framework for fitting survival models in R and for evaluating, interpreting, and defending the model selected for economic evaluation.
+This [R notebook](https://github.com/davidzhao1015/parameter-surv-modeling-hta/blob/main/param-surv-model-heor.md) provides a reusable, HTA-oriented framework for fitting survival models in R and for evaluating, interpreting, and defending the model selected for economic evaluation.

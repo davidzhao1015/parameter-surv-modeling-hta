@@ -44,6 +44,21 @@ jobs:
           )'
 
       - name: Commit rendered files
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Render R Markdown"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Render R Markdown"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push failed (attempt ${attempt}); retrying"
+            sleep $((attempt * 2))
+          done
+          exit 1

@@ -29,6 +29,12 @@ jobs:
           extra-packages: |
             any::rmarkdown
             any::knitr
+            any::survival
+            any::flexsurv
+            any::GofCens
+            any::tidyr
+            any::dplyr
+            any::ggplot2
 
       - name: Render Rmd
         run: |

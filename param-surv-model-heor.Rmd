@@ -98,10 +98,10 @@ The `IPD_ctrl_gp.csv` and `IPD_treat_gp.csv` files contain time-to-event data fo
 ```{r input}
 
 # Control arm
-ipd_ctrl <- read.csv("IPD_ctrl_gp.csv")
+ipd_ctrl <- read.csv("data/IPD_ctrl_gp.csv")
 
 # Treatment arm
-ipd_trt <- read.csv("IPD_treat_gp.csv")
+ipd_trt <- read.csv("data/IPD_treat_gp.csv")
 
 # Merge the data sets from the two arms
 ipd_merged <- rbind(ipd_ctrl, ipd_trt)
